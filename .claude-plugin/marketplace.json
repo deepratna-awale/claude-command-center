@@ -1,0 +1,13 @@
+{
+  "name": "claude-command-center",
+  "owner": {
+    "name": "Deepratna Awale"
+  },
+  "plugins": [
+    {
+      "name": "command-center",
+      "source": "./"
+    }
+  ],
+  "description": "Command Center: one place for your projects and their Claude sessions."
+}

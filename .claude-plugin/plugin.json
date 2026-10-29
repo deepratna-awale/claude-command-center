@@ -1,0 +1,22 @@
+{
+  "name": "command-center",
+  "version": "0.1.0",
+  "description": "A Command Center pane for Claude Code: every project in one place, with the sessions started in it, launched from it, or linked to it.",
+  "author": {
+    "name": "Deepratna Awale"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "terminal": {
+      "type": "string",
+      "title": "Terminal app",
+      "description": "Where new and resumed Claude Code sessions open on macOS",
+      "options": [
+        "Terminal",
+        "iTerm"
+      ],
+      "default": "Terminal"
+    }
+  }
+}
