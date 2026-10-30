@@ -1,6 +1,6 @@
 {
   "name": "command-center",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A Command Center pane for Claude Code: every project in one place, with the sessions started in it, launched from it, or linked to it.",
   "author": {
     "name": "Deepratna Awale"
@@ -17,6 +17,12 @@
         "iTerm"
       ],
       "default": "Terminal"
+    },
+    "openInDesktop": {
+      "type": "boolean",
+      "title": "Open in the desktop app",
+      "description": "Open the Command Center pane by itself when a session starts in the Claude desktop app",
+      "default": true
     }
   }
 }

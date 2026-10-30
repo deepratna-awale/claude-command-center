@@ -84,3 +84,19 @@ test('start a session in Terminal and message a running one', async ($, on) => {
   expect((await ui.find({ type: 'Text', text: /delivered/ }))?.text).toBe('Message delivered.')
   await ui.unmount()
 })
+
+test('the pane opens by itself in the desktop app, not in the terminal', async ($, on) => {
+  const opened: string[] = []
+  on('command.register', (_, e) => ({ value: { command: e.name } }))
+  on('ui.open', (_, e) => {
+    opened.push(e.id)
+    return { value: { isPlaced: true } }
+  })
+  on('store.get', () => ({ value: undefined }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+
+  await $.session.start({ cwd: '/Users/d/app', surface: 'terminal', isInteractive: true })
+  expect(opened).toHaveLength(0)
+  await $.session.start({ cwd: '/Users/d/app', surface: 'desktop', isInteractive: true })
+  expect(opened).toEqual(['command-center'])
+})
