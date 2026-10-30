@@ -25,6 +25,7 @@ type Os = 'mac' | 'linux' | 'windows'
 const summaries = new Map<string, SessionSummary>()
 let os: Os | undefined
 let terminalApp: 'Terminal' | 'iTerm' = 'Terminal'
+let autoOpen = true
 
 async function detectOs($: $): Promise<Os> {
   if (os) return os
@@ -148,6 +149,7 @@ async function launch($: $, project: Project, prompt: string): Promise<void> {
 
 export const register: Register = (on, options) => {
   terminalApp = options.terminal === 'iTerm' ? 'iTerm' : 'Terminal'
+  autoOpen = options.openInDesktop !== false
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
@@ -160,6 +162,8 @@ export const register: Register = (on, options) => {
     await $.command.register({ name: 'command-center', description: 'Open the Command Center: your projects and their Claude sessions' })
     await $.command.register({ name: 'cc-add', description: 'Add this folder to the Command Center as a project (optional: a name)' })
     $.clock.every(REFRESH_MS, () => update($, tick, n => n + 1))
+    // The desktop app docks panes beside the chat, so the Command Center opens there by itself.
+    if (autoOpen && e.surface === 'desktop') void $.ui.open({ id: PANE, title: 'Command Center' })
     return result
   })
 

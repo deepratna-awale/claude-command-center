@@ -2,7 +2,7 @@
 
 A Claude Code mod that gives you one place for all your projects and the Claude sessions that belong to them.
 
-Open it with `/command-center` and a **Command Center** pane opens beside the chat, in the terminal or in the Claude desktop app's Code tab.
+In the Claude desktop app's Code tab the **Command Center** pane opens beside the chat by itself. In a terminal, open it with `/command-center`.
 
 ## What it does
 
@@ -14,27 +14,30 @@ Open it with `/command-center` and a **Command Center** pane opens beside the ch
 
 ## Install
 
-At the prompt of a terminal Claude Code session:
+**In the Claude desktop app** (Code tab):
+
+1. Click **+** next to the prompt box, then **Plugins**.
+2. Choose **Add marketplace** and enter `deepratna-awale/claude-command-center`.
+3. Choose **Add plugin** and pick **command-center**.
+
+Start a local session in the Code tab and the Command Center pane opens beside the chat. You can also type `/command-center` to open it again.
+
+**In a terminal session:**
 
 ```
 /plugin install command-center --marketplace deepratna-awale/claude-command-center
 ```
 
-Answer `y` to add the marketplace, then pick a scope (user scope makes it load everywhere). From a shell:
+Answer `y` to add the marketplace, then pick a scope (user scope makes it load everywhere, including the desktop app's local sessions).
 
-```
-claude plugin install command-center --marketplace deepratna-awale/claude-command-center
-```
-
-In the desktop app, where `/plugin` does not run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `deepratna-awale/claude-command-center`, then **Add plugin**.
-
-Needs Claude Code 2.1.287 or later (2.1.286 in the desktop app).
+Needs Claude Code 2.1.287 or later (2.1.286 in the desktop app). Mods run in the desktop app's Code tab, not in its Chat tab.
 
 ## Settings
 
 | Option | Values | Default |
 | --- | --- | --- |
 | `terminal` | `Terminal`, `iTerm` | `Terminal` |
+| `openInDesktop` | `true`, `false` | `true` |
 
 Set it in the `/config` menu, or under `pluginConfigs.command-center` in `~/.claude/settings.json`.
 
