@@ -1,6 +1,6 @@
 {
   "name": "command-center",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "A Command Center pane for Claude Code: every project in one place, with the sessions started in it, launched from it, or linked to it.",
   "author": {
     "name": "Deepratna Awale"
