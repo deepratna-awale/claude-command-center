@@ -26,6 +26,7 @@ const summaries = new Map<string, SessionSummary>()
 let os: Os | undefined
 let terminalApp: 'Terminal' | 'iTerm' = 'Terminal'
 let autoOpen = true
+let ready = false
 
 async function detectOs($: $): Promise<Os> {
   if (os) return os
@@ -147,24 +148,43 @@ async function launch($: $, project: Project, prompt: string): Promise<void> {
   await say($, `Started "${title}" in ${terminalApp}.`)
 }
 
+/** Loads saved projects, registers the commands and starts the refresh timer, once per load. */
+async function setUp($: $, again = false): Promise<void> {
+  if (ready && !again) return
+  // $.state lives for the session; $.store carries projects between sessions.
+  const stored = await $.store.get('projects')
+  if (Array.isArray(stored)) await update($, projects, () => stored as Project[])
+  const storedLaunched = await $.store.get('launched')
+  if (Array.isArray(storedLaunched)) await update($, launched, () => storedLaunched as LaunchedSession[])
+  await $.command.register({ name: 'command-center', description: 'Open the Command Center: your projects and their Claude sessions' })
+  await $.command.register({ name: 'cc-add', description: 'Add this folder to the Command Center as a project (optional: a name)', argumentHint: '[name]' })
+  if (!ready) $.clock.every(REFRESH_MS, () => update($, tick, n => n + 1))
+  ready = true
+}
+
 export const register: Register = (on, options) => {
   terminalApp = options.terminal === 'iTerm' ? 'iTerm' : 'Terminal'
   autoOpen = options.openInDesktop !== false
 
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    // $.state lives for the session; $.store carries projects between sessions.
-    const stored = await $.store.get('projects')
-    if (Array.isArray(stored)) await update($, projects, () => stored as Project[])
-    const storedLaunched = await $.store.get('launched')
-    if (Array.isArray(storedLaunched)) await update($, launched, () => storedLaunched as LaunchedSession[])
-
-    await $.command.register({ name: 'command-center', description: 'Open the Command Center: your projects and their Claude sessions' })
-    await $.command.register({ name: 'cc-add', description: 'Add this folder to the Command Center as a project (optional: a name)' })
-    $.clock.every(REFRESH_MS, () => update($, tick, n => n + 1))
+    await setUp($)
     // The desktop app docks panes beside the chat, so the Command Center opens there by itself.
     if (autoOpen && e.surface === 'desktop') void $.ui.open({ id: PANE, title: 'Command Center' })
     return result
+  })
+
+  // A plugin installed mid-session never sees session.start, and /clear or /resume
+  // reset $.state without one: set up again on the next of these instead.
+  on('classic.SessionStart', async ($, e, next) => {
+    const result = await next(e)
+    await setUp($, true)
+    return result
+  })
+
+  on('prompt.submit', async ($, e, next) => {
+    await setUp($)
+    return next(e)
   })
 
   on('command.run', { command: 'command-center' }, async $ => {

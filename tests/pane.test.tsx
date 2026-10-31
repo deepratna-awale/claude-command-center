@@ -100,3 +100,18 @@ test('the pane opens by itself in the desktop app, not in the terminal', async (
   await $.session.start({ cwd: '/Users/d/app', surface: 'desktop', isInteractive: true })
   expect(opened).toEqual(['command-center'])
 })
+
+test('installed mid-session, the commands appear with the next prompt', async ($, on) => {
+  const registered: string[] = []
+  on('command.register', (_, e) => {
+    registered.push(e.name)
+    return { value: { command: e.name } }
+  })
+  on('store.get', () => ({ value: undefined }))
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+
+  await $.prompt.submit({ text: 'hello', wait: false, origin: { kind: 'composer' } })
+  expect(registered).toEqual(['command-center', 'cc-add'])
+  await $.prompt.submit({ text: 'again', wait: false, origin: { kind: 'composer' } })
+  expect(registered).toHaveLength(2)
+})
