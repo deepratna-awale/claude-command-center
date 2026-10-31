@@ -46,9 +46,10 @@ test('add this folder, then see its sessions', async ($, on) => {
   }
 })
 
-test('start a session in Terminal and message a running one', async ($, on) => {
-  const ran: string[][] = []
+test('start a background task, message a session, and open a past one here', async ($, on) => {
+  const spawned: { prompt: string; cwd?: string }[] = []
   const sent: unknown[] = []
+  const ran: string[] = []
   on('env.get', (_, e) => ({ value: e.name === 'HOME' ? '/Users/d' : undefined }))
   on('session.root', () => ({ value: '/Users/d/app' }))
   on('session.repo', () => ({ value: null }))
@@ -59,29 +60,36 @@ test('start a session in Terminal and message a running one', async ($, on) => {
   on('fs.read', () => ({ value: TRANSCRIPT }))
   on('clock.now', () => ({ value: 61_000 }))
   on('store.set', () => ({ value: undefined }))
-  on('process.run', (_, e) => {
-    ran.push([...e.argv])
-    return { value: { exitCode: 0, stdout: e.argv[0] === 'uname' ? 'Darwin\n' : '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+  on('agent.spawn', (_, e) => {
+    spawned.push({ prompt: e.prompt, cwd: e.cwd })
+    // Only core sets agentId; a test's answer starts no agent.
+    return { model: 'm' }
   })
   on('session.send', (_, e) => {
     sent.push(e)
     return { isDelivered: true }
+  })
+  on('command.list', () => ({ value: [{ name: 'resume', description: 'Resume', source: 'builtin' }] }))
+  on('command.run', (_, e) => {
+    ran.push(`${e.command} ${e.args}`)
+    return { text: '' }
   })
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ui.press({ key: 'add-here' })
   await ui.input({ key: 'launch', text: 'add dark mode' })
 
-  const osascript = ran.find(argv => argv[0] === 'osascript')
-  expect(osascript?.[2]).toContain("claude '--session-id'")
-  expect(osascript?.[2]).toContain("'add dark mode'")
-  expect((await ui.find({ type: 'Text', text: /Started/ }))?.text).toBe('Started "add dark mode" in Terminal.')
-  expect(await ui.find({ type: 'Text', text: /waiting for its first message/ })).toBeDefined()
+  expect(spawned[0]?.cwd).toBe('/Users/d/app')
+  expect(spawned[0]?.prompt).toContain('add dark mode')
+  expect((await ui.find({ type: 'Text', text: /^Started/ }))?.text).toContain('Started "add dark mode" in the background')
 
   await ui.press({ key: 'msg-s1' })
   await ui.input({ key: 'send-s1', text: 'status?' })
   expect(sent).toHaveLength(1)
   expect((await ui.find({ type: 'Text', text: /delivered/ }))?.text).toBe('Message delivered.')
+
+  await ui.press({ key: 'resume-s1' })
+  expect(ran).toEqual(['resume s1'])
   await ui.unmount()
 })
 
