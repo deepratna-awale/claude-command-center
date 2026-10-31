@@ -8,7 +8,8 @@ In the Claude desktop app's Code tab the **Command Center** pane opens beside th
 
 - **Projects.** Add any folder you run Claude Code in (`/cc-add`, or **Add this folder** in the pane). Each project keeps its folder, repository and any links you pin to it, such as claude.ai projects or chats. Projects are kept between sessions.
 - **Sessions per project.** Every Claude Code session started in the project's folder (or below it) is listed with its title, branch, message count and last activity, read straight from `~/.claude/projects`. Sessions you started anywhere else show under **Other folders**, where one click turns a folder into a project.
-- **Start and resume.** Start a new Claude Code session for a project, with an optional first prompt, or resume any listed one. It opens in a new Terminal (or iTerm) window on macOS. On other systems the pane shows the command to run.
+- **Start work, all inside the app.** **Start a background task** runs a Claude agent in the project's folder from the session you're in. It shows in the app's subagent pane and in the project's **Background tasks**, where **Message** sends it more instructions.
+- **Open past sessions.** **Open here** switches the current tab to a listed session with the built-in `/resume`. Where the app has no `/resume`, the pane tells you which session to pick from the sidebar.
 - **Talk to a running session.** **Message** sends text into another Claude Code session that is running, so one session can hand work to another.
 - **Act as you.** **Ask Claude here to act on this project** sends a prompt to the current session with the project's folder and links attached. For clicking and typing in the Claude desktop app or on claude.ai, Claude uses its own computer use or Claude in Chrome.
 
@@ -36,10 +37,7 @@ Needs Claude Code 2.1.287 or later (2.1.286 in the desktop app). Mods run in the
 
 | Option | Values | Default |
 | --- | --- | --- |
-| `terminal` | `Terminal`, `iTerm` | `Terminal` |
 | `openInDesktop` | `true`, `false` | `true` |
-
-Set it in the `/config` menu, or under `pluginConfigs.command-center` in `~/.claude/settings.json`.
 
 ## Developing
 

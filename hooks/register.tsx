@@ -1,8 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Draft, LaunchedSession, MessageTarget, Project, SessionSummary, View } from '../types'
-import { claudeLine, terminalArgv, uuid, webUrlOf } from './lib/launch'
+import type { BackgroundTask, Draft, MessageTarget, Project, SessionSummary, View } from '../types'
+import { uuid, webUrlOf } from './lib/launch'
 import { dirBelongsTo, isInside, sessionLabel, summarise, timeAgo } from './lib/transcripts'
 
 const PANE = 'command-center'
@@ -11,7 +11,7 @@ const REFRESH_MS = 15_000
 
 // Change a tag when the stored value's fields change: an older value then reads as the initial one.
 const projects = atom({ plugin: 'command-center', key: 'projects' } as const, [], { shape: 'projects-1' })
-const launched = atom({ plugin: 'command-center', key: 'launched' } as const, [], { shape: 'launched-1' })
+const launched = atom({ plugin: 'command-center', key: 'launched' } as const, [], { shape: 'launched-2' })
 const view = atom({ plugin: 'command-center', key: 'view' } as const, { kind: 'home' } as View)
 const draft = atom({ plugin: 'command-center', key: 'draft' } as const, { name: '', path: '', repoUrl: '' } as Draft)
 const status = atom({ plugin: 'command-center', key: 'status' } as const, null as string | null)
@@ -19,25 +19,10 @@ const messageTarget = atom({ plugin: 'command-center', key: 'messageTarget' } as
 const tick = atom({ plugin: 'command-center', key: 'tick' } as const, 0)
 
 type $ = EngineInterface
-type Os = 'mac' | 'linux' | 'windows'
-
 // Transcript summaries by file, reused while the file is unchanged.
 const summaries = new Map<string, SessionSummary>()
-let os: Os | undefined
-let terminalApp: 'Terminal' | 'iTerm' = 'Terminal'
 let autoOpen = true
 let ready = false
-
-async function detectOs($: $): Promise<Os> {
-  if (os) return os
-  try {
-    const { stdout } = await $.process.run(['uname', '-s'], { timeoutMs: 5000 })
-    os = stdout.trim() === 'Darwin' ? 'mac' : 'linux'
-  } catch {
-    os = 'windows'
-  }
-  return os
-}
 
 async function transcriptsRoot($: $): Promise<string | undefined> {
   const configured = await $.env.get('CLAUDE_CONFIG_DIR')
@@ -98,7 +83,7 @@ async function saveProjects($: $, fn: (list: Project[]) => Project[]): Promise<v
   await $.store.set('projects', await read($, projects))
 }
 
-async function saveLaunched($: $, fn: (list: LaunchedSession[]) => LaunchedSession[]): Promise<void> {
+async function saveLaunched($: $, fn: (list: BackgroundTask[]) => BackgroundTask[]): Promise<void> {
   await update($, launched, fn)
   await $.store.set('launched', await read($, launched))
 }
@@ -123,29 +108,39 @@ async function addProject($: $, input: { name: string; path: string; repoUrl?: s
   return project
 }
 
-async function runClaudeInTerminal($: $, cwd: string, args: string[]): Promise<boolean> {
-  const line = claudeLine(cwd, args)
-  if ((await detectOs($)) !== 'mac') {
-    await say($, `Run this in a terminal: ${line}`)
-    return false
+/**
+ * Opens a past session in this tab with the built-in /resume. Where the app has no
+ * /resume, says where to find the session instead.
+ */
+async function openHere($: $, s: SessionSummary): Promise<void> {
+  const commands = await $.command.list()
+  if (!commands.some(c => c.name === 'resume')) {
+    await say($, `Open "${sessionLabel(s)}" from the session list in the sidebar.`)
+    return
   }
-  const { exitCode, stderr } = await $.process.run(terminalArgv(line, terminalApp), { timeoutMs: 15_000 })
-  if (exitCode !== 0) {
-    await say($, `Could not open ${terminalApp}: ${stderr.trim() || `exit ${exitCode}`}`)
-    return false
-  }
-  return true
+  await $.command.run({ command: 'resume', args: s.sessionId })
 }
 
-async function launch($: $, project: Project, prompt: string): Promise<void> {
-  const sessionId = uuid()
-  const args = ['--session-id', sessionId]
-  if (prompt.trim()) args.push(prompt.trim())
-  if (!(await runClaudeInTerminal($, project.path, args))) return
-  const title = prompt.trim() || `New session in ${project.name}`
-  const launchedAt = await $.clock.now()
-  await saveLaunched($, list => [...list.slice(-199), { projectId: project.id, sessionId, title, launchedAt }])
-  await say($, `Started "${title}" in ${terminalApp}.`)
+/** Starts a background agent that works in the project's folder, inside this app. */
+async function launch($: $, project: Project, task: string): Promise<void> {
+  const prompt = task.trim()
+  if (!prompt) return
+  const title = prompt.length > 60 ? `${prompt.slice(0, 59)}…` : prompt
+  const spawned = await $.agent.spawn({
+    prompt: `You are working on the project "${project.name}" in ${project.path}. Work only inside that folder.\n\n${prompt}`,
+    description: `${project.name}: ${title}`.slice(0, 80),
+    cwd: project.path,
+  })
+  if (spawned.deny !== undefined) {
+    await say($, `Could not start it: ${spawned.deny}`)
+    return
+  }
+  const agentId = spawned.agentId ?? spawned.teammateId
+  if (agentId) {
+    const launchedAt = await $.clock.now()
+    await saveLaunched($, list => [...list.slice(-49), { projectId: project.id, agentId, title, launchedAt }])
+  }
+  await say($, `Started "${title}" in the background. Follow it in the subagent pane.`)
 }
 
 /** Loads saved projects, registers the commands and starts the refresh timer, once per load. */
@@ -155,7 +150,7 @@ async function setUp($: $, again = false): Promise<void> {
   const stored = await $.store.get('projects')
   if (Array.isArray(stored)) await update($, projects, () => stored as Project[])
   const storedLaunched = await $.store.get('launched')
-  if (Array.isArray(storedLaunched)) await update($, launched, () => storedLaunched as LaunchedSession[])
+  if (Array.isArray(storedLaunched)) await update($, launched, () => storedLaunched as BackgroundTask[])
   await $.command.register({ name: 'command-center', description: 'Open the Command Center: your projects and their Claude sessions' })
   await $.command.register({ name: 'cc-add', description: 'Add this folder to the Command Center as a project (optional: a name)', argumentHint: '[name]' })
   if (!ready) $.clock.every(REFRESH_MS, () => update($, tick, n => n + 1))
@@ -163,7 +158,6 @@ async function setUp($: $, again = false): Promise<void> {
 }
 
 export const register: Register = (on, options) => {
-  terminalApp = options.terminal === 'iTerm' ? 'iTerm' : 'Terminal'
   autoOpen = options.openInDesktop !== false
 
   on('session.start', async ($, e, next) => {
@@ -238,16 +232,12 @@ export const register: Register = (on, options) => {
           {project && s.cwd && s.cwd !== project.path ? ` · ${s.cwd.slice(project.path.length + 1)}` : ''}
         </Text>
         <Box gap={1}>
-          <Button
-            key={`resume-${s.sessionId}`}
-            label="Resume"
-            onPress={() => runClaudeInTerminal($, s.cwd ?? project?.path ?? '.', ['--resume', s.sessionId])}
-          />
+          <Button key={`resume-${s.sessionId}`} label="Open here" onPress={() => openHere($, s)} />
           {Input && (
             <Button
               key={`msg-${s.sessionId}`}
               label="Message"
-              onPress={() => update($, messageTarget, () => ({ sessionId: s.sessionId, title: sessionLabel(s) }))}
+              onPress={() => update($, messageTarget, () => ({ to: { sessionId: s.sessionId }, key: s.sessionId, title: sessionLabel(s) }))}
             />
           )}
         </Box>
@@ -295,8 +285,8 @@ export const register: Register = (on, options) => {
       }
       const { root, names } = await transcriptDirs($)
       const sessions = await sessionsIn($, root, names.filter(n => dirBelongsTo(n, project.path)), SESSIONS_PER_PROJECT)
-      const onDisk = new Set(sessions.map(s => s.sessionId))
-      const pending = (await read($, launched)).filter(l => l.projectId === project.id && !onDisk.has(l.sessionId))
+      const agents = new Map((await $.agent.list().catch(() => [])).map(a => [a.id, a]))
+      const tasks = (await read($, launched)).filter(t => t.projectId === project.id).reverse()
       const target = await read($, messageTarget)
 
       return (
@@ -321,8 +311,8 @@ export const register: Register = (on, options) => {
             <Box flexDirection="column" gap={1} marginBottom={1}>
               <Input
                 key="launch"
-                label="Start a Claude Code session"
-                placeholder="First prompt (optional), Enter to start"
+                label="Start a background task in this project"
+                placeholder="What should Claude do in this folder?"
                 submitLabel="Start"
                 onSubmit={v => launch($, project, v)}
               />
@@ -359,13 +349,13 @@ export const register: Register = (on, options) => {
           {target && Input && (
             <Box flexDirection="column" marginBottom={1}>
               <Input
-                key={`send-${target.sessionId}`}
-                label={`Message to "${target.title}" (it must be running)`}
+                key={`send-${target.key}`}
+                label={`Message to "${target.title}"`}
                 autoFocus
                 submitLabel="Send"
                 onSubmit={async v => {
                   if (!v.trim()) return
-                  const sent = await $.session.send({ to: { sessionId: target.sessionId }, text: v.trim() })
+                  const sent = await $.session.send({ to: target.to, text: v.trim() })
                   await say($, sent.isDelivered ? 'Message delivered.' : `Not delivered: ${sent.reason}`)
                   await update($, messageTarget, () => null)
                 }}
@@ -374,14 +364,32 @@ export const register: Register = (on, options) => {
             </Box>
           )}
 
+          {tasks.length > 0 && <Text bold>Background tasks</Text>}
+          {tasks.map(t => {
+            const agent = agents.get(t.agentId)
+            const state = agent ? agent.status : 'finished'
+            return (
+              <Box key={`t-${t.agentId}`} flexDirection="column" marginBottom={1}>
+                <Text wrap="truncate-end">{t.title}</Text>
+                <Text dimColor>
+                  {state} · started {timeAgo(t.launchedAt, now)}
+                </Text>
+                <Box gap={1}>
+                  {Input && (
+                    <Button
+                      key={`msg-${t.agentId}`}
+                      label="Message"
+                      onPress={() => update($, messageTarget, () => ({ to: { agentId: t.agentId }, key: t.agentId, title: t.title }))}
+                    />
+                  )}
+                  <Button key={`forget-${t.agentId}`} label="Remove" plain dimColor onPress={() => saveLaunched($, ls => ls.filter(x => x.agentId !== t.agentId))} />
+                </Box>
+              </Box>
+            )
+          })}
+
           <Text bold>Sessions</Text>
-          {pending.map(l => (
-            <Box key={`p-${l.sessionId}`} flexDirection="column" marginBottom={1}>
-              <Text wrap="truncate-end">{l.title}</Text>
-              <Text dimColor>Launched {timeAgo(l.launchedAt, now)} · waiting for its first message</Text>
-            </Box>
-          ))}
-          {sessions.length === 0 && pending.length === 0 && (
+          {sessions.length === 0 && (
             <Text dimColor>No Claude Code sessions in this folder yet.</Text>
           )}
           {sessions.map(s => sessionRow(s, project))}
@@ -439,7 +447,7 @@ export const register: Register = (on, options) => {
                     await update($, view, () => ({ kind: 'project', id: p.id }) as View)
                   }}
                 />
-                <Button key={`resume-${row.latest.sessionId}`} label="Resume latest" onPress={() => runClaudeInTerminal($, row.cwd, ['--resume', row.latest.sessionId])} />
+                <Button key={`resume-${row.latest.sessionId}`} label="Open latest here" onPress={() => openHere($, row.latest)} />
               </Box>
             </Box>
           ))}

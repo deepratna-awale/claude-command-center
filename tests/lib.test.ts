@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { claudeLine, terminalArgv, webUrlOf } from '../hooks/lib/launch'
+import { webUrlOf } from '../hooks/lib/launch'
 import { dirBelongsTo, isInside, projectDirName, sessionLabel, summarise } from '../hooks/lib/transcripts'
 
 const TRANSCRIPT = [
@@ -29,13 +29,6 @@ test('transcript folders map to project folders', async () => {
   expect(dirBelongsTo('-Users-d-apple', '/Users/d/app')).toBe(false)
   expect(isInside('/Users/d/app/web', '/Users/d/app')).toBe(true)
   expect(isInside('/Users/d/apple', '/Users/d/app')).toBe(false)
-})
-
-test('launch lines quote what they pass to the shell', async () => {
-  expect(claudeLine("/Users/d/it's", ['--resume', 'abc'])).toBe(`cd '/Users/d/it'\\''s' && claude '--resume' 'abc'`)
-  const argv = terminalArgv('echo "hi"', 'Terminal')
-  expect(argv[0]).toBe('osascript')
-  expect(argv[2]).toContain('do script "echo \\"hi\\""')
 })
 
 test('git remotes become web links', async () => {

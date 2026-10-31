@@ -10,10 +10,10 @@ export type Project = {
   createdAt: number
 }
 
-/** A session started from the Command Center, kept so it shows before its transcript exists. */
-export type LaunchedSession = {
+/** A background agent the Command Center started for a project, working in its folder. */
+export type BackgroundTask = {
   projectId: string
-  sessionId: string
+  agentId: string
   title: string
   launchedAt: number
 }
@@ -37,13 +37,13 @@ export type View =
 
 export type Draft = { name: string; path: string; repoUrl: string }
 
-export type MessageTarget = { sessionId: string; title: string }
+export type MessageTarget = { to: { sessionId: string } | { agentId: string }; key: string; title: string }
 
 declare module 'claude-code' {
   interface PluginState {
     'command-center': {
       projects: Shaped<Project[]>
-      launched: Shaped<LaunchedSession[]>
+      launched: Shaped<BackgroundTask[]>
       view: View
       draft: Draft
       status: string | null
